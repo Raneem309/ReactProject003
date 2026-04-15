@@ -164,13 +164,13 @@ select {
   opacity: 0.82;
 }
 
-.welcome-title.move-down {
+/* .welcome-title.move-down {
   left: calc(115% - 0rem);
   top: calc(100% - 2rem);
   transform: translate(-100%, -100%) scale(0.42);
   text-align: right;
   opacity: 0.72;
-}
+} */
 
 .start-button {
   position: fixed;
