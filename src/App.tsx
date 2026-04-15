@@ -329,7 +329,7 @@ function PersistentTitle({ titleVisible, titlePinned }: PersistentTitleProps) {
       className={[
         "welcome-title",
         titleVisible ? "is-visible" : "",
-        titlePinned ? "move-down" : "",
+        
       ].join(" ")}
     >
       Which Detroit Techno Pioneer
