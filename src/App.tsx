@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import trackFile from "./assets/idontknow.mp3";
+import { supabase } from "./supabase";
 
 /* =========================
    TYPES
@@ -79,8 +80,6 @@ interface StoredEntry {
    DATA
 ========================= */
 
-const STORAGE_KEY = "detroit-techno-pioneer-results";
-
 const questions: Question[] = [
   {
     id: "machine",
@@ -159,25 +158,25 @@ const resultsMap: Record<PioneerId, ResultData> = {
     id: "atkins",
     title: "Juan Atkins",
     description:
-      "You lean futuristic, conceptual, and forward thinking. You are drawn to techno as an idea as much as a feeling, and your choices point to sleek vision, innovation, and machine soul.",
+      "Widely regarded as the originator of techno, Juan Atkins helped establish the genre’s futuristic foundation. Under aliases like Model 500 and Infiniti, he fused machine rhythm, funk, and science fiction into a new sound. Through Cybotron and his Metroplex label, he laid down the blueprint for techno’s global future. “No UFO’s” remains one of the defining early records of the form.",
   },
   may: {
     id: "may",
     title: "Derrick May",
     description:
-      "You connect most with tension, atmosphere, and emotional impact. Your sound feels expressive, dramatic, and alive, balancing movement with feeling in a way that keeps techno human.",
+      "Known as one of Detroit techno’s great innovators, Derrick May brought emotional force and musical tension into the genre. As part of the Belleville Three, he helped shape techno into something both mechanical and deeply human. His work as Mayday and Rhythim Is Rhythim pushed the sound toward drama, movement, and intensity. “Strings of Life” remains one of electronic music’s most iconic records.",
   },
   saunderson: {
     id: "saunderson",
     title: "Kevin Saunderson",
     description:
-      "You respond to groove, directness, and body energy. Your choices show a love for rhythm, drive, and immediate connection, the kind of techno that locks people into motion fast.",
+      "Kevin Saunderson is a foundational Detroit techno figure whose work helped carry the sound to a global audience. As part of the Belleville Three, and through aliases like Reese and E-Dancer, he balanced club power with melody and groove. With Inner City, he bridged underground techno and crossover dance music without losing his Detroit roots. “Good Life” remains one of the genre’s most recognizable anthems.",
   },
   mills: {
     id: "mills",
     title: "Jeff Mills",
     description:
-      "You are drawn to precision, repetition, tension, and stripped machine energy. Your instincts point toward focused, disciplined, high impact techno with a sharp futuristic edge.",
+      "Jeff Mills, also known as The Wizard, is one of the most influential DJs and producers in Detroit techno history. As a founding force in Underground Resistance, he helped define a stripped back, high intensity sound built on precision and repetition. His work spans vinyl mastery, hardware experimentation, and a deeply futuristic approach to performance. “The Bells” remains one of techno’s most enduring records.",
   },
 };
 
@@ -252,17 +251,39 @@ function calculateResult(answers: AnswerMap) {
   };
 }
 
-function loadEntries(): StoredEntry[] {
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved ? (JSON.parse(saved) as StoredEntry[]) : [];
-  } catch {
+async function loadEntriesFromSupabase(): Promise<StoredEntry[]> {
+  const { data, error } = await supabase
+    .from("quiz_results")
+    .select("id, created_at, result_id, result_title")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error loading results:", error.message);
     return [];
   }
+
+  const entries: StoredEntry[] = (data ?? []).map((row) => {
+    return {
+      id: row.id,
+      createdAt: row.created_at,
+      resultId: row.result_id as PioneerId,
+      resultTitle: row.result_title,
+    };
+  });
+
+  return entries;
 }
 
-function saveEntries(entries: StoredEntry[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+async function saveEntryToSupabase(entry: Omit<StoredEntry, "id">) {
+  const { error } = await supabase.from("quiz_results").insert({
+    created_at: entry.createdAt,
+    result_id: entry.resultId,
+    result_title: entry.resultTitle,
+  });
+
+  if (error) {
+    console.error("Error saving result:", error.message);
+  }
 }
 
 function getStatistics(entries: StoredEntry[]) {
@@ -336,7 +357,10 @@ interface AudioStatusProps {
 function AudioStatus({ isMuted, isPlaying, onToggleMute }: AudioStatusProps) {
   return (
     <div className="audio-status">
-      <div className="audio-status-light" aria-hidden="true" />
+      <div
+        className={`audio-status-light ${isPlaying && !isMuted ? "is-playing" : ""}`}
+        aria-hidden="true"
+      />
       <span className="audio-status-text">
         {isMuted ? "Audio muted" : isPlaying ? "Audio on" : "Audio ready"}
       </span>
@@ -350,25 +374,41 @@ function AudioStatus({ isMuted, isPlaying, onToggleMute }: AudioStatusProps) {
 interface PersistentTitleProps {
   titleVisible: boolean;
   isHomeCentered: boolean;
+  titleFadingOut: boolean;
+  showFooterTitle: boolean;
 }
 
 function PersistentTitle({
   titleVisible,
   isHomeCentered,
+  titleFadingOut,
+  showFooterTitle,
 }: PersistentTitleProps) {
   return (
-    <h1
-      id={isHomeCentered ? "welcome-title-home" : "welcome-title-footer"}
-      className={[
-        "welcome-title",
-        titleVisible ? "is-visible" : "",
-        isHomeCentered ? "is-home" : "is-footer",
-      ].join(" ")}
-    >
-      Which Detroit Techno Pioneer
-      <br />
-      Are You?
-    </h1>
+    <>
+      {isHomeCentered && (
+        <h1
+          className={[
+            "welcome-title",
+            "welcome-title-home",
+            titleVisible ? "is-visible" : "",
+            titleFadingOut ? "is-fading-out" : "",
+          ].join(" ")}
+        >
+          Which Detroit Techno Pioneer
+          <br />
+          Are You?
+        </h1>
+      )}
+
+      {showFooterTitle && (
+        <h1 className="welcome-title welcome-title-footer is-visible">
+          Which Detroit Techno Pioneer
+          <br />
+          Are You?
+        </h1>
+      )}
+    </>
   );
 }
 
@@ -484,39 +524,19 @@ function ReviewSection({ onShowResult }: { onShowResult: () => void }) {
 function ResultSection({
   title,
   description,
-  scores,
   onRestart,
 }: {
   title: string;
   description: string;
-  scores: ScoreMap;
   onRestart: () => void;
 }) {
   return (
     <div className="page-shell fade-in-screen center-screen">
       <div className="results-block">
         <div className="review-kicker">Your result</div>
+        <p className="results-intro">You align most with</p>
         <h1 className="results-title">{title}</h1>
         <p className="review-description">{description}</p>
-
-        <div className="results-stats">
-          <div className="results-stat">
-            <span className="results-stat-label">Juan Atkins</span>
-            <span className="results-stat-value">{scores.atkins}</span>
-          </div>
-          <div className="results-stat">
-            <span className="results-stat-label">Derrick May</span>
-            <span className="results-stat-value">{scores.may}</span>
-          </div>
-          <div className="results-stat">
-            <span className="results-stat-label">Kevin Saunderson</span>
-            <span className="results-stat-value">{scores.saunderson}</span>
-          </div>
-          <div className="results-stat">
-            <span className="results-stat-label">Jeff Mills</span>
-            <span className="results-stat-value">{scores.mills}</span>
-          </div>
-        </div>
 
         <div className="results-actions">
           <button type="button" className="primary-pill" onClick={onRestart}>
@@ -528,7 +548,13 @@ function ResultSection({
   );
 }
 
-function StatisticsSection({ entries }: { entries: StoredEntry[] }) {
+function StatisticsSection({
+  entries,
+  isLoading,
+}: {
+  entries: StoredEntry[];
+  isLoading: boolean;
+}) {
   const counts = getStatistics(entries);
 
   const bars = [
@@ -546,8 +572,10 @@ function StatisticsSection({ entries }: { entries: StoredEntry[] }) {
         <div className="review-kicker">Statistics</div>
         <h2 className="review-title">Anonymous results so far</h2>
         <p className="review-description">
-          A minimal live view of saved results from this browser.
+          Shared results history across everyone using the live app.
         </p>
+
+        {isLoading && <p className="review-description">Loading results…</p>}
 
         <div className="stats-graph">
           {bars.map((bar) => (
@@ -598,8 +626,12 @@ export default function App() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [savedEntries, setSavedEntries] = useState<StoredEntry[]>([]);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const [titleVisible, setTitleVisible] = useState(false);
+  const [titleFadingOut, setTitleFadingOut] = useState(false);
+  const [showFooterTitle, setShowFooterTitle] = useState(false);
+
   const [showStartButton, setShowStartButton] = useState(false);
   const [startLeaving, setStartLeaving] = useState(false);
 
@@ -615,6 +647,15 @@ export default function App() {
   const resultData = useMemo(() => calculateResult(answers), [answers]);
 
   const isHomeCentered = currentView === "home";
+  useEffect(() => {
+    testSupabaseConnection();
+  }, []);
+  async function refreshEntries() {
+    setIsLoadingStats(true);
+    const entries = await loadEntriesFromSupabase();
+    setSavedEntries(entries);
+    setIsLoadingStats(false);
+  }
 
   function clearFadeInterval() {
     if (fadeIntervalRef.current !== null) {
@@ -659,7 +700,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    setSavedEntries(loadEntries());
+    void refreshEntries();
 
     const titleTimer = window.setTimeout(() => {
       setTitleVisible(true);
@@ -712,6 +753,12 @@ export default function App() {
     void startAudioWithFade();
   }, [isMuted]);
 
+  useEffect(() => {
+    if (currentView === "statistics") {
+      void refreshEntries();
+    }
+  }, [currentView]);
+
   function handleToggleMute() {
     setIsMuted((prev) => !prev);
   }
@@ -720,22 +767,29 @@ export default function App() {
     setCurrentView("home");
     setShowStartButton(true);
     setStartLeaving(false);
+    setTitleFadingOut(false);
+    setShowFooterTitle(false);
   }
 
   function goStatistics() {
     setCurrentView("statistics");
     setShowStartButton(false);
     setStartLeaving(false);
+    setTitleFadingOut(false);
+    setShowFooterTitle(true);
   }
 
   function goAbout() {
     setCurrentView("about");
     setShowStartButton(false);
     setStartLeaving(false);
+    setTitleFadingOut(false);
+    setShowFooterTitle(true);
   }
 
   function handleStartClick() {
     setStartLeaving(true);
+    setTitleFadingOut(true);
 
     if (isMuted) {
       setIsMuted(false);
@@ -743,6 +797,7 @@ export default function App() {
 
     window.setTimeout(() => {
       setShowStartButton(false);
+      setShowFooterTitle(true);
       setCurrentQuestionIndex(0);
       setAnswers({});
       setCurrentView("test");
@@ -774,17 +829,15 @@ export default function App() {
     setCurrentQuestionIndex((prev) => prev + 1);
   }
 
-  function handleShowResult() {
-    const entry: StoredEntry = {
-      id: Date.now(),
+  async function handleShowResult() {
+    const entry = {
       createdAt: new Date().toISOString(),
       resultId: resultData.result.id,
       resultTitle: resultData.result.title,
     };
 
-    const updatedEntries = [entry, ...savedEntries];
-    setSavedEntries(updatedEntries);
-    saveEntries(updatedEntries);
+    await saveEntryToSupabase(entry);
+    await refreshEntries();
     setCurrentView("result");
   }
 
@@ -794,6 +847,8 @@ export default function App() {
     setCurrentView("home");
     setShowStartButton(true);
     setStartLeaving(false);
+    setTitleFadingOut(false);
+    setShowFooterTitle(false);
   }
 
   return (
@@ -818,6 +873,8 @@ export default function App() {
       <PersistentTitle
         titleVisible={titleVisible}
         isHomeCentered={isHomeCentered}
+        titleFadingOut={titleFadingOut}
+        showFooterTitle={showFooterTitle}
       />
 
       {currentView === "home" && (
@@ -846,14 +903,26 @@ export default function App() {
         <ResultSection
           title={resultData.result.title}
           description={resultData.result.description}
-          scores={resultData.scores}
           onRestart={handleRestartTest}
         />
       )}
 
-      {currentView === "statistics" && <StatisticsSection entries={savedEntries} />}
+      {currentView === "statistics" && (
+        <StatisticsSection entries={savedEntries} isLoading={isLoadingStats} />
+      )}
 
       {currentView === "about" && <AboutSection />}
     </div>
   );
+}
+async function testSupabaseConnection() {
+  const { data, error } = await supabase
+    .from("quiz_results")
+    .select("*");
+
+  if (error) {
+    console.error("❌ Supabase error:", error);
+  } else {
+    console.log("✅ Supabase success:", data);
+  }
 }
