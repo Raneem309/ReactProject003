@@ -103,7 +103,7 @@ const questions: Question[] = [
   },
   {
     id: "soundDesign",
-    prompt: "What do you notice first in a Techno Track?",
+    prompt: "What do you notice first in a Techno track?",
     options: [
       { value: "synths", label: "Synths/Stabs" },
       { value: "groove", label: "Groove" },
@@ -116,8 +116,8 @@ const questions: Question[] = [
     prompt: "Where are you picking to play a techno set?",
     options: [
       { value: "space", label: "In Space" },
-      { value: "warehouse", label: "In a warehouse" },
-      { value: "club", label: "the biggest club in the world" },
+      { value: "warehouse", label: "In a Warehouse" },
+      { value: "club", label: "Biggest Club in the World" },
       { value: "sound", label: "Sound Designed Room" },
     ],
   },
